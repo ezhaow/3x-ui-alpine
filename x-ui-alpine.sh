@@ -93,7 +93,7 @@ before_show_menu() {
 }
 
 install() {
-    bash <(curl -Ls https://raw.githubusercontent.com/56idc/3x-ui-alpine/main/install_alpine.sh)
+    bash <(curl -Ls https://raw.githubusercontent.com/ezhaow/3x-ui-alpine/main/install_alpine.sh)
     if [[ $? == 0 ]]; then
         if [[ $# == 0 ]]; then
             start
@@ -112,7 +112,7 @@ update() {
         fi
         return 0
     fi
-    bash <(curl -Ls https://raw.githubusercontent.com/56idc/3x-ui-alpine/main/install_alpine.sh)
+    bash <(curl -Ls https://raw.githubusercontent.com/ezhaow/3x-ui-alpine/main/install_alpine.sh)
     if [[ $? == 0 ]]; then
         LOGI "更新完成, 面板已自动重启"
         before_show_menu
