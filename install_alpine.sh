@@ -11,12 +11,12 @@ cur_dir=$(pwd)
 [[ $EUID -ne 0 ]] && echo -e "${red}严重错误: ${plain} 请以 root 权限运行此脚本 \n " && exit 1
 
 install_base() {
-	apk add --no-cache --update ca-certificates tzdata fail2ban bash
-	rm -f /etc/fail2ban/jail.d/alpine-ssh.conf
-	cp /etc/fail2ban/jail.conf /etc/fail2ban/jail.local
-	sed -i "s/^\[ssh\]$/&\nenabled = false/" /etc/fail2ban/jail.local
-	sed -i "s/^\[sshd\]$/&\nenabled = false/" /etc/fail2ban/jail.local
-	sed -i "s/#allowipv6 = auto/allowipv6 = auto/g" /etc/fail2ban/fail2ban.conf
+    apk add --no-cache --update ca-certificates tzdata fail2ban bash
+    rm -f /etc/fail2ban/jail.d/alpine-ssh.conf
+    cp /etc/fail2ban/jail.conf /etc/fail2ban/jail.local
+    sed -i "s/^\[ssh\]$/&\nenabled = false/" /etc/fail2ban/jail.local
+    sed -i "s/^\[sshd\]$/&\nenabled = false/" /etc/fail2ban/jail.local
+    sed -i "s/#allowipv6 = auto/allowipv6 = auto/g" /etc/fail2ban/fail2ban.conf
 }
 
 gen_random_string() {
@@ -25,12 +25,37 @@ gen_random_string() {
     echo "$random_string"
 }
 
+# 获取IPv4或IPv6地址
+get_ip() {
+    # 优先尝试获取IPv6地址
+    local server_ipv6=$(ip -6 addr show scope global | grep -oP '(?<=inet6 )[\da-f:]+' | head -1)
+    if [[ -n "$server_ipv6" ]]; then
+        echo "[${server_ipv6}]"
+        return
+    fi
+    
+    # 如果没有IPv6地址，则获取IPv4地址
+    local server_ipv4=$(curl -s4 https://api.ipify.org || curl -s4 icanhazip.com || curl -s4 ipinfo.io/ip)
+    if [[ -n "$server_ipv4" ]]; then
+        echo "${server_ipv4}"
+        return
+    fi
+    
+    echo "无法获取服务器IP地址"
+    return 1
+}
+
 config_after_install() {
     local existing_username=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'username: .+' | awk '{print $2}')
     local existing_password=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'password: .+' | awk '{print $2}')
     local existing_webBasePath=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'webBasePath: .+' | awk '{print $2}')
     local existing_port=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'port: .+' | awk '{print $2}')
-    local server_ip=$(curl -s https://api.ipify.org)
+
+    # 获取服务器IP地址（支持IPv6）
+    local server_ip=$(get_ip)
+    if [[ $? -ne 0 ]]; then
+        echo -e "${red}警告: 无法获取服务器IP地址，请手动检查网络配置${plain}"
+    fi
 
     if [[ ${#existing_webBasePath} -lt 4 ]]; then
         if [[ "$existing_username" == "admin" && "$existing_password" == "admin" ]]; then
@@ -56,29 +81,13 @@ config_after_install() {
             echo -e "${green}面板路径: ${config_webBasePath}${plain}"
             echo -e "${green}访问面板URL: http://${server_ip}:${config_port}/${config_webBasePath}${plain}"
             echo -e "###############################################"
-            echo -e "${yellow}如果你忘记了登录信息, 你可以使用命令“x-ui settings”${plain}"
+            echo -e "${yellow}如果你忘记了登录信息, 你可以使用命令"x-ui settings"${plain}"
         else
             local config_webBasePath=$(gen_random_string 15)
-            echo -e "${yellow}面板路径缺失或太短, 正在生成一个新的...${plain}"
-            /usr/local/x-ui/x-ui setting -webBasePath "${config_webBasePath}"
-            echo -e "${green}新的面板路径: ${config_webBasePath}${plain}"
-            echo -e "${green}访问面板URL: http://${server_ip}:${existing_port}/${config_webBasePath}${plain}"
-        fi
-    else
-        if [[ "$existing_username" == "admin" && "$existing_password" == "admin" ]]; then
-            local config_username=$(gen_random_string 10)
-            local config_password=$(gen_random_string 10)
-
-            echo -e "${yellow}检测到默认用户名和密码, 需要安全更新...${plain}"
-            /usr/local/x-ui/x-ui setting -username "${config_username}" -password "${config_password}"
-            echo -e "生成新的随机登录用户名和密码:"
-            echo -e "###############################################"
             echo -e "${green}用户名: ${config_username}${plain}"
             echo -e "${green}密码: ${config_password}${plain}"
             echo -e "###############################################"
-            echo -e "${yellow}如果你忘记了登录信息, 你可以使用命令“x-ui settings”${plain}"
-        else
-            echo -e "${green}用户名, 密码和面板路径已正确设置. 退出...${plain}"
+            echo -e "${yellow}如果你忘记了登录信息, 你可以使用命令"x-ui settings"${plain}"
         fi
     fi
 
@@ -86,29 +95,22 @@ config_after_install() {
 }
 
 install_x-ui() {
-	cd /usr/local
+    cd /usr/local
     if [ $# == 0 ]; then
-        tag_version=$(curl -Ls "https://api.github.com/repos/56idc/3x-ui-alpine/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-        if [[ ! -n "$tag_version" ]]; then
+        last_version=$(curl -Ls "https://api.github.com/repos/56idc/3x-ui-alpine/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+        if [[ ! -n "$last_version" ]]; then
             echo -e "${red}获取x-ui版本失败, 可能是GitHub API限制或网络连接失败, 请检查您的网络连接后重试...${plain}"
             exit 1
         fi
-        echo -e "获取x-ui最新版本: ${tag_version}, 开始安装..."
-        wget --no-check-certificate -O /usr/local/x-ui-linux-alpine.tar.gz https://github.com/56idc/3x-ui-alpine/releases/download/${tag_version}/x-ui-linux-alpine.tar.gz
+        echo -e "获取x-ui最新版本: ${last_version}, 开始安装..."
+        wget --no-check-certificate -O /usr/local/x-ui-linux-alpine.tar.gz https://github.com/56idc/3x-ui-alpine/releases/download/${last_version}/x-ui-linux-alpine.tar.gz
         if [[ $? -ne 0 ]]; then
             echo -e "${red}下载 x-ui 失败, 请确保你的服务器可以访问 GitHub ${plain}"
             exit 1
         fi
     else
-        tag_version=$1
-        tag_version_numeric=${tag_version#v}
-        min_version="2.4.8"
-        if [[ "$(printf '%s\n' "$min_version" "$tag_version_numeric" | sort -V | head -n1)" != "$min_version" ]]; then
-            echo -e "${red}请使用较新的版本(至少 v2.4.8), 退出安装...${plain}"
-            exit 1
-        fi
-
-        url="https://github.com/56idc/3x-ui-alpine/releases/download/${tag_version}/x-ui-linux-alpine.tar.gz"
+        last_version=$1
+        url="https://github.com/56idc/3x-ui-alpine/releases/download/${last_version}/x-ui-linux-alpine.tar.gz"
         echo -e "开始安装x-ui $1"
         wget --no-check-certificate -O /usr/local/x-ui-linux-alpine.tar.gz ${url}
         if [[ $? -ne 0 ]]; then
@@ -118,16 +120,7 @@ install_x-ui() {
     fi
 
     if [[ -e /usr/local/x-ui/ ]]; then
-      echo -e "卸载旧版本..."
-      rc-update del x-ui
-      rc-service x-ui stop
-      fail2ban-client -x stop
-      rm /usr/local/x-ui/ -rf
-      rm /etc/init.d/x-ui
-	  if [[ -e /app/bin/ ]]; then
-	    pgrep -f x-ui | xargs -r kill -9
-            rm /app -rf
-	  fi
+        rm /usr/local/x-ui/ -rf
     fi
 
     tar zxvf x-ui-linux-alpine.tar.gz
@@ -136,16 +129,23 @@ install_x-ui() {
     rm x-ui/app -rf
     rm x-ui/DockerEntrypoint.sh
     chmod +x x-ui/x-ui x-ui/bin/xray-linux-amd64
-    wget --no-check-certificate -O /usr/bin/x-ui https://raw.githubusercontent.com/56idc/3x-ui-alpine/main/x-ui-alpine.sh
+    
+    # 使用IPv6下载脚本
+    wget -6 --no-check-certificate -O /usr/bin/x-ui https://raw.githubusercontent.com/56idc/3x-ui-alpine/main/x-ui-alpine.sh || \
+    wget -4 --no-check-certificate -O /usr/bin/x-ui https://raw.githubusercontent.com/56idc/3x-ui-alpine/main/x-ui-alpine.sh
     chmod +x /usr/bin/x-ui
-    wget --no-check-certificate -O /etc/init.d/x-ui https://raw.githubusercontent.com/56idc/3x-ui-alpine/main/x-ui.rc
+    
+    wget -6 --no-check-certificate -O /etc/init.d/x-ui https://raw.githubusercontent.com/56idc/3x-ui-alpine/main/x-ui.rc || \
+    wget -4 --no-check-certificate -O /etc/init.d/x-ui https://raw.githubusercontent.com/56idc/3x-ui-alpine/main/x-ui.rc
     chmod +x /etc/init.d/x-ui
+
     config_after_install
     export XRAY_VMESS_AEAD_FORCED="false"
     fail2ban-client -x start
     rc-update add x-ui default
     rc-service x-ui start
-    echo -e "${green}x-ui ${tag_version}${plain} 安装完成, 运行中..."
+
+    echo -e "${green}x-ui ${last_version}${plain} 安装完成, 运行中..."
     echo -e ""
     echo -e "x-ui子命令菜单:"
     echo -e "----------------------------------------------"
