@@ -97,20 +97,20 @@ config_after_install() {
 install_x-ui() {
     cd /usr/local
     if [ $# == 0 ]; then
-        last_version=$(curl -Ls "https://api.github.com/repos/ezhaow/3x-ui-alpine/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+        last_version=$(curl -Ls "https://api.github.com/repos/56idc/3x-ui-alpine/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
         if [[ ! -n "$last_version" ]]; then
             echo -e "${red}获取x-ui版本失败, 可能是GitHub API限制或网络连接失败, 请检查您的网络连接后重试...${plain}"
             exit 1
         fi
         echo -e "获取x-ui最新版本: ${last_version}, 开始安装..."
-        wget --no-check-certificate -O /usr/local/x-ui-linux-alpine.tar.gz https://github.com/ezhaow/3x-ui-alpine/releases/download/${last_version}/x-ui-linux-alpine.tar.gz
+        wget --no-check-certificate -O /usr/local/x-ui-linux-alpine.tar.gz https://github.com/56idc/3x-ui-alpine/releases/download/${last_version}/x-ui-linux-alpine.tar.gz
         if [[ $? -ne 0 ]]; then
             echo -e "${red}下载 x-ui 失败, 请确保你的服务器可以访问 GitHub ${plain}"
             exit 1
         fi
     else
         last_version=$1
-        url="https://github.com/ezhaow/3x-ui-alpine/releases/download/${last_version}/x-ui-linux-alpine.tar.gz"
+        url="https://github.com/56idc/3x-ui-alpine/releases/download/${last_version}/x-ui-linux-alpine.tar.gz"
         echo -e "开始安装x-ui $1"
         wget --no-check-certificate -O /usr/local/x-ui-linux-alpine.tar.gz ${url}
         if [[ $? -ne 0 ]]; then
